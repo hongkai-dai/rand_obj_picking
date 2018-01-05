@@ -53,6 +53,14 @@ target_link_libraries(test_cup_flip
   drake::drake
   ${PCL_LIBRARIES})
 
+add_executable(test_cup_flip_optitrack test_cup_flip_optitrack.cc util.cc)
+target_link_libraries(test_cup_flip_optitrack
+        perception
+        robot_bridge
+        rgbd_bridge
+        drake::drake
+        ${PCL_LIBRARIES})
+
 add_executable(test_scan test_scan.cc util.cc)
 target_link_libraries(test_scan
   perception
@@ -100,6 +108,9 @@ install(TARGETS test_plate
   DESTINATION ${CMAKE_INSTALL_PREFIX})
 
 install(TARGETS test_cup_flip
+  DESTINATION ${CMAKE_INSTALL_PREFIX})
+
+install(TARGETS test_cup_flip_optitrack
   DESTINATION ${CMAKE_INSTALL_PREFIX})
 
 install(TARGETS test_scan

@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.5 FATAL_ERROR)
 
 project(rand_obj_picking)
 
-set(drake_DIR "$ENV{HOME}/drake_bazel_build/lib/cmake/drake")
+set(drake_DIR "$ENV{HOME}/dev/drake_bazel_build/lib/cmake/drake")
 
 include(ExternalProject)
 
