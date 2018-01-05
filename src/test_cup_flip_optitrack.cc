@@ -80,12 +80,12 @@ bool MoveFromTrayToStage(
       robot_comm.CloseGripper();
       robot_bridge::GripperState wsg_state;
       robot_comm.GetGripperState(&wsg_state);
-      if (wsg_state.get_position() <= 0.05) {
-        // Didn't grasp stuff, should abort.
-        robot_comm.MoveJointRadians({q_rad[0], q_now}, {2, 1}, true);
-        robot_comm.OpenGripper();
-        return false;
-      }
+      // if (wsg_state.get_position() <= 0.05) {
+      //   // Didn't grasp stuff, should abort.
+      //   robot_comm.MoveJointRadians({q_rad[0], q_now}, {2, 1}, true);
+      //   robot_comm.OpenGripper();
+      //   return false;
+      // }
 
       // Retract
       robot_comm.MoveJointRadians(q_rad[0], true);
@@ -95,7 +95,7 @@ bool MoveFromTrayToStage(
 
       // Place.
       robot_comm.MoveStraightUntilTouch(Eigen::Vector3d::UnitZ(), -0.2,
-                                        Eigen::Vector3d(100, 100, 20),
+                                        Eigen::Vector3d(100, 100, 15),
                                         Eigen::Vector3d::Constant(-100), true);
 
       robot_comm.OpenGripper();
@@ -135,7 +135,7 @@ void MoveFromStageToRack(const Eigen::Isometry3d &cup_pose_above_rack,
 
   // Place until Fz > 25.
   robot_comm.MoveStraightUntilTouch(Eigen::Vector3d::UnitZ(), -0.2,
-                                    Eigen::Vector3d(100, 100, 10),
+                                    Eigen::Vector3d(100, 100, 15),
                                     Eigen::Vector3d::Constant(-100), true);
 
   // Release.
@@ -507,7 +507,7 @@ int main(int argc, char **argv) {
 
   // place the gripper above the staging area
   Eigen::VectorXd stage_prep_q_deg(7);
-  stage_prep_q_deg << 26, 17, -1, -82, 5, 78, 11;
+  stage_prep_q_deg << 26, 17, -1, -82, 5, 78, 11; 
 
   // Reset robot.
   robot_comm.OpenGripper();
@@ -603,7 +603,7 @@ int main(int argc, char **argv) {
 
       // Generate a virtual cup pose for testing purposes
       Eigen::Isometry3f cup_pose = Eigen::Isometry3f::Identity();
-      cup_pose.translation() = Eigen::Vector3f(.4, .4, 0);
+      cup_pose.translation() = Eigen::Vector3f(.5, -.4, 0);
 
       // Exec script.
       bool success =
@@ -672,7 +672,7 @@ int main(int argc, char **argv) {
 
       // Generate a virtual cup pose for testing purposes
       Eigen::Isometry3f cup_pose = Eigen::Isometry3f::Identity();
-      cup_pose.translation() = Eigen::Vector3f(.4, .4, 0);
+      cup_pose.translation() = Eigen::Vector3f(.5, .18, 0);
 
     std::vector<Eigen::Isometry3d> grasps_in_cup_frame;
     grasps_in_cup_frame.push_back(
