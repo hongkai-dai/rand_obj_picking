@@ -238,7 +238,7 @@ void FlipCup(const Eigen::Isometry3d &cup_pose,
 
   // rewind
   X0 = X0 * Eigen::AngleAxis<double>(-M_PI / 2., Eigen::Vector3d::UnitY());
-  X0 = Eigen::Translation3d(Eigen::Vector3d(0, 0, -0.015)) * X0;
+  X0 = Eigen::Translation3d(Eigen::Vector3d(0, 0, 0)) * X0;
   if (robot_comm.MoveTool(X0, 2., true) != robot_bridge::MotionStatus::DONE) {
     throw std::runtime_error("Motion error.");
   }
@@ -672,7 +672,7 @@ int main(int argc, char **argv) {
 
       // Generate a virtual cup pose for testing purposes
       Eigen::Isometry3f cup_pose = Eigen::Isometry3f::Identity();
-      cup_pose.translation() = Eigen::Vector3f(.5, .18, 0);
+      cup_pose.translation() = Eigen::Vector3f(.51, .18, 0);
 
     std::vector<Eigen::Isometry3d> grasps_in_cup_frame;
     grasps_in_cup_frame.push_back(
