@@ -1,5 +1,10 @@
 #include "drake/multibody/joints/floating_base_types.h"
 #include "drake/multibody/parsers/urdf_parser.h"
+#include "drake/manipulation/perception/optitrack_pose_extractor.h"
+#include "lcmtypes/lcmtypes/optitrack/optitrack_marker_set_t.hpp"
+#include "lcmtypes/lcmtypes/optitrack/optitrack_frame_t.hpp"
+//#include "optitrack/optitrack_frame_t.hpp"
+#include "drake/lcm/drake_lcm.h"
 // #include "perception/perception.h"
 // #include "perception/point_cloud_fusion.h"
 // #include "rgbd_bridge/real_sense_sr300.h"
@@ -7,6 +12,8 @@
 #include "robot_bridge/iiwa_controller.h"
 
 #include "util.h"
+
+#include <unistd.h>
 
 struct WorkSpace {
   Eigen::Isometry3d center{Eigen::Isometry3d::Identity()};
@@ -135,8 +142,8 @@ void MoveFromStageToRack(const Eigen::Isometry3d &cup_pose_above_rack,
 
   // Place until Fz > 25.
   robot_comm.MoveStraightUntilTouch(Eigen::Vector3d::UnitZ(), -0.2,
-                                    Eigen::Vector3d(100, 100, 15),
-                                    Eigen::Vector3d::Constant(-100), true);
+                                    Eigen::Vector3d(200, 200, 25),
+                                    Eigen::Vector3d::Constant(-200), true);
 
   // Release.
   robot_comm.OpenGripper();
@@ -238,7 +245,7 @@ void FlipCup(const Eigen::Isometry3d &cup_pose,
 
   // rewind
   X0 = X0 * Eigen::AngleAxis<double>(-M_PI / 2., Eigen::Vector3d::UnitY());
-  X0 = Eigen::Translation3d(Eigen::Vector3d(0, 0, 0)) * X0;
+  X0 = Eigen::Translation3d(Eigen::Vector3d(0.02, -0.02, -0.01)) * X0;
   if (robot_comm.MoveTool(X0, 2., true) != robot_bridge::MotionStatus::DONE) {
     throw std::runtime_error("Motion error.");
   }
@@ -425,12 +432,95 @@ Eigen::Isometry3f RectifyCupPose(const Eigen::Isometry3f &cup_pose) {
   return ret;
 }
 
+/** Tracks the pose of the object from OptiTrack. */
+class OptitrackMessageHandler : public drake::lcm::DrakeLcmMessageHandlerInterface {
+public:
+  /**
+   * Construct the handler given the pose of the optitrack in the world frame.
+   */
+  OptitrackMessageHandler(const Eigen::Isometry3d& X_WO) : X_WO_{X_WO}, received_msg_{} {}
+
+  void HandleMessage(const std::string& channel, const void* message_buffer, int message_size) override {
+    std::lock_guard<std::mutex> lock(message_mutex_);
+    received_msg_.decode(message_buffer, 0, message_size);
+    received_channel_ = channel;
+  }
+
+  Eigen::Isometry3d GetObjectPose(int object_id) const {
+    Eigen::Isometry3d X_OM;  // pose of the object in the optitrack frame
+    for (int i = 0; i < received_msg_.num_rigid_bodies; ++i) {
+      if (received_msg_.rigid_bodies[i].id == object_id) {
+        // Optitrack quaternion is in x-y-z-w order.
+        X_OM.linear() = Eigen::Quaterniond(received_msg_.rigid_bodies[i].quat[3], received_msg_.rigid_bodies[i].quat[0], received_msg_.rigid_bodies[i].quat[1], received_msg_.rigid_bodies[i].quat[2]).toRotationMatrix();
+        X_OM.translation() = Eigen::Vector3d(received_msg_.rigid_bodies[i].xyz[0], received_msg_.rigid_bodies[i].xyz[1], received_msg_.rigid_bodies[i].xyz[2]);
+        break;
+      }
+    }
+    // Now compute the pose of object in the world frame.
+    const Eigen::Isometry3d X_WM = X_WO_ * X_OM;
+    if (object_id == 2) {
+    Eigen::Isometry3d IIWA_BASE;
+    IIWA_BASE.setIdentity();
+    IIWA_BASE.linear() << 0, -1, 0, 1, 0, 0, 0, 0, 1;
+    IIWA_BASE.translation() << 0, 0, 0.03;
+    std::cout << (IIWA_BASE * X_OM.inverse()).matrix() << std::endl;
+  }
+    return X_WM;
+  }
+
+  std::string get_received_channel() const { return received_channel_; }
+
+private:
+  Eigen::Isometry3d X_WO_;
+  std::mutex message_mutex_;
+  optitrack::optitrack_frame_t received_msg_;
+  std::string received_channel_;
+};
+
+Eigen::Isometry3f CupPoseFromOptiTrack(drake::lcm::DrakeLcm* drake_lcm, OptitrackMessageHandler* handler) {
+  //drake_lcm->StartReceiveThread();
+  Eigen::Isometry3d X_WM;
+  while (true) {
+    if (handler->get_received_channel() == "OPTITRACK_FRAMES") {
+      X_WM = handler->GetObjectPose(1);
+      // drake_lcm->StopReceiveThread();
+      break;
+    }
+  }
+  std::cout << "optitrack cup frame.\n" << X_WM.matrix() << std::endl;
+  // Magic number, this is because the origin of the mug frame from the optitrack seems not being in the center of the cup.
+      // I should figure out the transform from the mug frame coming from optitrack (with origin being the 
+      // geometric center of the markers, and the axis not necessarily aligned with the cup), to the cup frame (origin being the
+      // center of the center of the cylinder)
+  Eigen::Isometry3f pose_cylinder_to_mug;
+  pose_cylinder_to_mug.setIdentity();
+  pose_cylinder_to_mug.linear() << 0, 1, 0, -1, 0, 0, 0, 0, 1;
+  //pose_cylinder_to_mug.translation() << 0, -.01, 0.01;
+  Eigen::Isometry3f cup_pose = X_WM.cast<float>() * pose_cylinder_to_mug;
+  std::cout << "cup pose.\n" << cup_pose.matrix() << std::endl;
+  return cup_pose;
+}
+
 int main(int argc, char **argv) {
   if (argc != 2) {
     std::cout << "Need to input # of cups in the dish rack.\n";
     exit(-1);
   }
   const int num_cups_in_rack = std::atoi(argv[1]);
+
+  // // Create object extractor
+  Eigen::Isometry3d X_WO;  // Pose of the optitrack in the world frame.
+  //X_WO.setIdentity();
+  //X_WO.translation() << -0.94, -1.02, -0.78;
+  X_WO.linear() << -0.0714833, -0.997442, -0.0004, 0.99744, -0.0714829, -0.00088, 0.000852788, -0.000474262, 1;
+  X_WO.translation() = Eigen::Vector3d(1.09, -0.86, -0.78); 
+
+  // Create lcm handler
+  OptitrackMessageHandler handler(X_WO);
+
+  drake::lcm::DrakeLcm drake_lcm;
+  drake_lcm.Subscribe("OPTITRACK_FRAMES", &handler);
+  drake_lcm.StartReceiveThread();
 
   // Define workspace.
   WorkSpace input_tray;
@@ -525,6 +615,7 @@ int main(int argc, char **argv) {
 
   // Move cups from tray to rack until no cups are detected in the tray.
   for (int cup_ctr = num_cups_in_rack; cup_ctr < (int)pose_above_rack.size();) {
+    sleep(2.5);
     //////////////////////////////////////////////////////////////////////////
     // Transfer from input tray
     //////////////////////////////////////////////////////////////////////////
@@ -602,8 +693,10 @@ int main(int argc, char **argv) {
       //cup_pose = RectifyCupPose(cup_pose);
 
       // Generate a virtual cup pose for testing purposes
-      Eigen::Isometry3f cup_pose = Eigen::Isometry3f::Identity();
-      cup_pose.translation() = Eigen::Vector3f(.5, -.4, 0);
+      //Eigen::Isometry3f cup_pose = Eigen::Isometry3f::Identity();
+      //cup_pose.translation() = Eigen::Vector3f(.5, -.4, 0);
+
+      Eigen::Isometry3f cup_pose = CupPoseFromOptiTrack(&drake_lcm, &handler);
 
       // Exec script.
       bool success =
@@ -671,8 +764,12 @@ int main(int argc, char **argv) {
     // robot_comm.WaitForRobotMotionCompletion();
 
       // Generate a virtual cup pose for testing purposes
-      Eigen::Isometry3f cup_pose = Eigen::Isometry3f::Identity();
-      cup_pose.translation() = Eigen::Vector3f(.51, .18, 0);
+      // Eigen::Isometry3f cup_pose = Eigen::Isometry3f::Identity();
+      // cup_pose.translation() = Eigen::Vector3f(.51, .18, 0);
+
+    Eigen::Isometry3f cup_pose = CupPoseFromOptiTrack(&drake_lcm, &handler);
+    cup_pose = cup_pose * Eigen::AngleAxis<float>(M_PI/6, Eigen::Vector3f::UnitZ()) * Eigen::Translation3f(Eigen::Vector3f(0.012, -0.012, 0.015));
+
 
     std::vector<Eigen::Isometry3d> grasps_in_cup_frame;
     grasps_in_cup_frame.push_back(
