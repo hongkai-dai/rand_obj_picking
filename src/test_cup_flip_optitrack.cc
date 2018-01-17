@@ -142,7 +142,7 @@ void MoveFromStageToRack(const Eigen::Isometry3d &cup_pose_above_rack,
 
   // Place until Fz > 25.
   robot_comm.MoveStraightUntilTouch(Eigen::Vector3d::UnitZ(), -0.2,
-                                    Eigen::Vector3d(200, 200, 25),
+                                    Eigen::Vector3d(200, 200, 8),
                                     Eigen::Vector3d::Constant(-200), true);
 
   // Release.
@@ -397,19 +397,19 @@ void GeneratePlacementGoalsAboveRack(
   // row 1
   for (int i = 0; i < 4; i++) {
     pose_above_rack->push_back(
-        Eigen::Translation3d(Eigen::Vector3d(-0.167, -0.43 - 0.11 * i, z)) *
+        Eigen::Translation3d(Eigen::Vector3d(-0.167, -0.43 - 0.11 * 0, z)) *
         Eigen::AngleAxisd(M_PI / 2., Eigen::Vector3d::UnitZ()));
   }
   // row 2
   for (int i = 0; i < 4; i++) {
     pose_above_rack->push_back(
-        Eigen::Translation3d(Eigen::Vector3d(-0.0, -0.43 - 0.11 * i, z)) *
+        Eigen::Translation3d(Eigen::Vector3d(-0.167, -0.43 - 0.11 * 0, z)) *
         Eigen::AngleAxisd(M_PI / 2., Eigen::Vector3d::UnitZ()));
   }
   // row 3
   for (int i = 0; i < 4; i++) {
     pose_above_rack->push_back(
-        Eigen::Translation3d(Eigen::Vector3d(0.167, -0.43 - 0.11 * i, z)) *
+        Eigen::Translation3d(Eigen::Vector3d(-0.167, -0.43 - 0.11 * 0, z)) *
         Eigen::AngleAxisd(M_PI / 2., Eigen::Vector3d::UnitZ()));
   }
   Eigen::VectorXd q_above_rack(7);
@@ -615,7 +615,7 @@ int main(int argc, char **argv) {
 
   // Move cups from tray to rack until no cups are detected in the tray.
   for (int cup_ctr = num_cups_in_rack; cup_ctr < (int)pose_above_rack.size();) {
-    sleep(2.5);
+    sleep(4);
     //////////////////////////////////////////////////////////////////////////
     // Transfer from input tray
     //////////////////////////////////////////////////////////////////////////
